@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Equalizer MP3 player</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#101117">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600&display=swap">
+<style>
+:root{--bg:#f3f2ee;--panel:#fff;--ink:#17181d;--mute:#6a6c76;--line:#dcdbd5;--accent:#5b4bff;--peak:#e8366b;--track:#e4e3dd;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101117;--panel:#181a22;--ink:#eceef5;--mute:#8f93a3;--line:#262935;--accent:#8c7dff;--peak:#ff5c8a;--track:#262935}}
+:root[data-theme="dark"]{--bg:#101117;--panel:#181a22;--ink:#eceef5;--mute:#8f93a3;--line:#262935;--accent:#8c7dff;--peak:#ff5c8a;--track:#262935}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Sora,system-ui,sans-serif}
+.app{max-width:460px;margin:0 auto;padding:16px 14px 28px}
+h1{font-size:18px;font-weight:600;margin:4px 0 14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+#name{font-weight:600;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{color:var(--mute);font-size:12px}
+canvas{width:100%;height:120px;display:block;margin:10px 0 6px}
+input[type=range]{accent-color:var(--accent)}
+#seek{width:100%;margin:0}
+.times{display:flex;justify-content:space-between;font-size:12px;color:var(--mute);margin-top:2px}
+.ctl{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:10px}
+button{font:inherit;color:inherit;cursor:pointer}
+.ib{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--bg);display:grid;place-items:center}
+.ib.big{width:62px;height:62px;background:var(--accent);border-color:var(--accent);color:#fff}
+.ib:focus-visible,.chip:focus-visible,.txt:focus-visible,li button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.vol{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--mute)}
+.vol input{flex:1}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.row b{font-weight:600}
+.txt{background:none;border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:13px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px}
+.chip{flex:none;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 13px;font-size:13px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.bands{display:grid;grid-template-columns:repeat(10,1fr);gap:2px}
+.band{display:flex;flex-direction:column;align-items:center;gap:6px}
+.band input{writing-mode:vertical-lr;direction:rtl;height:150px;width:26px;margin:0}
+.db{font-size:11px;color:var(--mute);min-height:16px}
+.hz{font-size:11px}
+ul{list-style:none;margin:0;padding:0}
+li button{width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 4px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+li:last-child button{border-bottom:0}
+li.cur button{color:var(--accent);font-weight:600}
+.empty{color:var(--mute);font-size:14px;padding:6px 0}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style></head>
+<body><main class="app">
+<h1>Equalizer player</h1>
+
+<section class="card">
+  <div id="name">No song loaded</div>
+  <div class="sub" id="state">Add songs to begin</div>
+  <canvas id="cv" aria-label="Live spectrum"></canvas>
+  <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+  <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+  <div class="ctl">
+    <button class="ib" id="prev" aria-label="Previous"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12L18 6v12z"/></svg></button>
+    <button class="ib big" id="play" aria-label="Play"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path id="pp" d="M8 5v14l11-7z"/></svg></button>
+    <button class="ib" id="next" aria-label="Next"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM14.5 12L6 18V6z"/></svg></button>
+  </div>
+  <div class="vol"><span>Volume</span><input id="vol" type="range" min="0" max="100" value="80" aria-label="Volume"></div>
+</section>
+
+<section class="card">
+  <div class="row"><b>Equalizer</b><button class="txt" id="reset">Reset</button></div>
+  <div class="chips" id="chips"></div>
+  <div class="bands" id="bands"></div>
+  <div class="sub" style="margin-top:8px;text-align:center">Gain in dB, from -12 to +12</div>
+</section>
+
+<section class="card">
+  <div class="row"><b>Playlist</b><button class="txt" id="add">Add songs</button></div>
+  <input id="file" type="file" accept="audio/*,.mp3" multiple hidden>
+  <ul id="list"></ul>
+</section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const FREQS=[32,64,125,250,500,1000,2000,4000,8000,16000];
+const LBL=['32','64','125','250','500','1k','2k','4k','8k','16k'];
+const PRE={'Flat':[0,0,0,0,0,0,0,0,0,0],'Bass boost':[8,7,5,3,1,0,0,0,0,0],'Treble boost':[0,0,0,0,0,1,3,5,7,8],'Vocal':[-3,-2,-1,1,3,4,3,1,-1,-2],'Rock':[5,4,2,-1,-2,-1,2,4,5,5],'Pop':[-1,1,3,4,3,0,-1,-1,1,2]};
+const audio=new Audio();audio.volume=.8;
+let ac,filters=[],analyser,tracks=[],cur=-1;
+function load(){try{const v=JSON.parse(localStorage.getItem('eq-gains'));return Array.isArray(v)&&v.length===10?v:null}catch(e){return null}}
+function save(){try{localStorage.setItem('eq-gains',JSON.stringify(gains))}catch(e){}}
+let gains=load()||PRE.Flat.slice();
+
+const bands=$('#bands');
+FREQS.forEach((f,i)=>{
+  const d=document.createElement('div');d.className='band';
+  d.innerHTML='<span class="db" id="db'+i+'"></span><input type="range" min="-12" max="12" step="0.5" aria-label="'+LBL[i]+' Hz gain"><span class="hz">'+LBL[i]+'</span>';
+  d.querySelector('input').addEventListener('input',e=>{gains[i]=+e.target.value;apply();save()});
+  bands.appendChild(d);
+});
+const sliders=[...bands.querySelectorAll('input')];
+const chips=$('#chips');
+Object.keys(PRE).forEach(n=>{
+  const b=document.createElement('button');b.className='chip';b.textContent=n;b.dataset.n=n;
+  b.onclick=()=>{gains=PRE[n].slice();apply();save()};chips.appendChild(b);
+});
+$('#reset').onclick=()=>{gains=PRE.Flat.slice();apply();save()};
+function apply(){
+  gains.forEach((g,i)=>{sliders[i].value=g;$('#db'+i).textContent=(g>0?'+':'')+g;if(filters[i])filters[i].gain.value=g});
+  chips.querySelectorAll('.chip').forEach(b=>b.classList.toggle('on',PRE[b.dataset.n].every((v,i)=>v===gains[i])));
+}
+apply();
+
+function initAudio(){
+  if(ac)return;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  ac=new AC();
+  let node=ac.createMediaElementSource(audio);
+  filters=FREQS.map((f,i)=>{
+    const b=ac.createBiquadFilter();
+    b.type=i===0?'lowshelf':i===9?'highshelf':'peaking';
+    b.frequency.value=f;b.Q.value=1.1;b.gain.value=gains[i];
+    node.connect(b);node=b;return b;
+  });
+  analyser=ac.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.8;
+  node.connect(analyser);analyser.connect(ac.destination);
+}
+function play(i){
+  if(!tracks[i])return;
+  initAudio();if(ac.state==='suspended')ac.resume();
+  cur=i;audio.src=tracks[i].url;
+  audio.play().catch(()=>{});
+  render();
+}
+function toggle(){
+  if(cur<0){if(tracks.length)play(0);else $('#file').click();return}
+  if(ac&&ac.state==='suspended')ac.resume();
+  if(audio.paused)audio.play().catch(()=>{});else audio.pause();
+}
+function step(d){if(!tracks.length)return;play((cur+d+tracks.length)%tracks.length)}
+$('#play').onclick=toggle;$('#prev').onclick=()=>step(-1);$('#next').onclick=()=>step(1);
+audio.addEventListener('ended',()=>step(1));
+audio.addEventListener('play',()=>{$('#pp').setAttribute('d','M6 5h4v14H6zM14 5h4v14h-4z');$('#play').setAttribute('aria-label','Pause');$('#state').textContent='Playing'});
+audio.addEventListener('pause',()=>{$('#pp').setAttribute('d','M8 5v14l11-7z');$('#play').setAttribute('aria-label','Play');$('#state').textContent='Paused'});
+const fmt=t=>isFinite(t)?Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0'):'0:00';
+audio.addEventListener('timeupdate',()=>{
+  $('#cur').textContent=fmt(audio.currentTime);$('#dur').textContent=fmt(audio.duration);
+  if(isFinite(audio.duration))$('#seek').value=audio.currentTime/audio.duration*1000;
+});
+$('#seek').oninput=e=>{if(isFinite(audio.duration))audio.currentTime=e.target.value/1000*audio.duration};
+$('#vol').oninput=e=>{audio.volume=e.target.value/100};
+
+$('#add').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{
+  const first=tracks.length;
+  [...e.target.files].forEach(f=>tracks.push({name:f.name.replace(/\.[^.]+$/,''),url:URL.createObjectURL(f)}));
+  e.target.value='';
+  if(cur<0&&tracks.length)play(first);else render();
+};
+function render(){
+  $('#name').textContent=cur>=0?tracks[cur].name:'No song loaded';
+  const ul=$('#list');ul.innerHTML='';
+  if(!tracks.length){ul.innerHTML='<li class="empty">Add songs from your phone to start.</li>';return}
+  tracks.forEach((t,i)=>{
+    const li=document.createElement('li');if(i===cur)li.className='cur';
+    const b=document.createElement('button');b.textContent=t.name;b.onclick=()=>play(i);
+    li.appendChild(b);ul.appendChild(li);
+  });
+}
+render();
+
+const cv=$('#cv'),g2=cv.getContext('2d'),N=36,bars=new Array(N).fill(0),caps=new Array(N).fill(0);
+function draw(){
+  requestAnimationFrame(draw);
+  const dpr=window.devicePixelRatio||1,w=cv.clientWidth*dpr,h=cv.clientHeight*dpr;
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}
+  g2.clearRect(0,0,w,h);
+  let data=null;
+  if(analyser&&!audio.paused){data=new Uint8Array(analyser.frequencyBinCount);analyser.getByteFrequencyData(data)}
+  const cs=getComputedStyle(document.documentElement),ac1=cs.getPropertyValue('--accent'),pk=cs.getPropertyValue('--peak');
+  const gap=3*dpr,bw=(w-gap*(N-1))/N;
+  for(let i=0;i<N;i++){
+    let v=0;
+    if(data){const t=i/(N-1),idx=Math.floor(3+Math.pow(t,1.7)*(data.length*0.55));v=data[idx]/255}
+    bars[i]+=(v-bars[i])*.35;
+    caps[i]=Math.max(bars[i],caps[i]-.008);
+    const bh=Math.max(3*dpr,bars[i]*h),x=i*(bw+gap);
+    g2.fillStyle=ac1;g2.fillRect(x,h-bh,bw,bh);
+    g2.fillStyle=pk;g2.fillRect(x,h-Math.max(caps[i]*h,3*dpr)-3*dpr,bw,2*dpr);
+  }
+}
+draw();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+</script></body></html>
